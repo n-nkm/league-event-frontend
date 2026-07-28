@@ -43,8 +43,9 @@ export async function getPreviousDrafts(fetch: typeof globalThis.fetch): Promise
     }
 
     function mapDraftToFinal(draftData: DraftData): FinishedDraft{
-        var players = draftData.blueTeam.map(player => mapDraftPlayerToFinalPlayer(player))
-        let res: FinishedDraft = {gameId: draftData.gameId, picks: players};
+        var blueplayers = draftData.blueTeam.map(player => mapDraftPlayerToFinalPlayer(player));
+        var redplayers = draftData.redTeam.map(player => mapDraftPlayerToFinalPlayer(player));
+        let res: FinishedDraft = {gameId: draftData.gameId, picks: [...blueplayers,...redplayers]};
         return res;
     }
 
