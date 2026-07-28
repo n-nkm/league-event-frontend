@@ -6,6 +6,8 @@
     import type { DraftData, DraftPlayer } from "$lib/draft/DraftData";
     import { asset } from "$app/paths";
     import pickPlaceholder from "$lib/assets/pick_champion_placeholder.png";
+    import type { ActionData, ChampSelectStateEvent } from "$lib/draft/StateDto";
+    import { applyFearlessRules, getPreviousDrafts, Team, type FinishedDraft } from "$lib/draft/previousDrafts";
 
     let draftData: DraftData = $state({
         blueTeamBans: [],
@@ -14,14 +16,25 @@
         redTeam: [],
         phase: "",
         remainingTime: 0,
+        gameId: "NONE",
     });
+
+    let previousGames: FinishedDraft[] = $state([]);
+
+    const addPreviousGame = (res: FinishedDraft) => {
+        console.dir(res);
+        previousGames.push(res)
+    }
 
     const handleChampSelectEvent: messageCallbackType = (msg) => {
         var body: ChampSelectStateEvent = JSON.parse(msg.body);
         var incomingSorted = sortChampSelectState(body);
         var viewDraftData = padDraftData(incomingSorted);
+        applyFearlessRules(viewDraftData, draftData, addPreviousGame);
         draftData = viewDraftData;
     };
+
+
 
     function padDraftData(rawDraft: DraftData): DraftData {
         let paddedDraft: DraftData = {
@@ -29,7 +42,6 @@
         };
         while (paddedDraft.blueTeamBans.length < 5) {
             const bane = returnemptyBan("BLUE_TEAM");
-            console.dir(bane);
             paddedDraft.blueTeamBans.push(bane);
         }
         while (paddedDraft.redTeamBans.length < 5) {
@@ -53,8 +65,10 @@
             redTeam: [],
             remainingTime: 0,
             phase: "",
+            gameId: "",
         };
         incomingDraftData.remainingTime = event.remainingTime;
+        incomingDraftData.gameId = event.gameId;
         incomingDraftData.phase = event.phase;
         event.players.forEach((player) => {
             if (player.team === "BLUE_SIDE") {
@@ -116,6 +130,10 @@
             brokerURL: "ws://localhost:8080/spectate",
         });
 
+        getPreviousDrafts(fetch).then(drafts => {
+            previousGames.push(...drafts);
+        })
+
         client.onConnect = (frame) => {
             console.log("connected");
             client.subscribe("/topic/draft-events", handleChampSelectEvent);
@@ -128,7 +146,6 @@
     <div class="bans">
         {#each bans as ban}
             <div class="ban {ban.isInProgress ? 'active' : ''}">
-                <!-- <div>{ban.targetChampion?.name}</div> -->
                 <img
                     src={ban.targetChampion?.htmlImageSrc}
                     alt={ban.targetChampion?.name}
@@ -203,6 +220,20 @@
     </div>
 {/snippet}
 
+{#snippet renderPreviousGames(drafts: FinishedDraft[], blueSide: boolean)}
+        {#each drafts as draft}
+        {@const picks = draft.picks.filter(pick => (pick.team == Team.BLUE_SIDE) == blueSide)}
+            <div class="previous-game">
+                {#each picks as pick}
+                    <img class="previous-pick"
+                        src={pick.champion?.htmlImageTileSrc}
+                        alt={pick.champion?.name}
+                    />
+                {/each}
+            </div>
+        {/each}
+{/snippet}
+
 <div>
     <div class="draftbox">
         <div class="blue-team team">
@@ -224,9 +255,19 @@
         </div>
     </div>
     <div class="teaminfo-container">
-        <div class="teaminfo teaminfo-blue" contenteditable="true">Team 1</div>
+        <div class="teaminfo .blue-team">
+            <div class="teaminfo-blue" contenteditable="true">Team 1</div>
+            <div class="fearless-container blue-team">
+                {@render renderPreviousGames(previousGames, true)}
+            </div>
+        </div>
         <div class="versus">VS</div>
-        <div class="teaminfo teaminfo-red" contenteditable="true">Team 2</div>
+        <div class="teaminfo">
+            <div class="teaminfo-red" contenteditable="true">Team 2</div>
+            <div class="fearless-container red-team">
+                {@render renderPreviousGames(previousGames, false)}
+            </div>
+        </div>
     </div>
 </div>
 
@@ -245,7 +286,7 @@
     .teaminfo-container {
         display: grid;
         grid-template-columns: 47.8% auto 47.8%;
-        align-items: center;
+        align-items: flex-start;
         width: 100%;
     }
 
@@ -279,6 +320,36 @@
         );
         text-align: left;
         padding-left: 10px;
+    }
+
+    .previous-game {
+        display: flex;
+        max-width: 40%;
+        margin-top: 5px;
+    }
+
+    .blue-team .previous-game{
+        margin-left: auto;
+        flex-direction: row-reverse;
+    }
+
+    .red-team .previous-game{
+        flex-direction: row;
+    }
+
+    .previous-pick {
+        text-align: center;
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: 35%;
+    }
+
+    .blue-team .previous-pick {
+        margin-left: 5px;
+    }
+
+    .red-team .previous-pick {
+        margin-right: 5px;
     }
 
     .bans {
